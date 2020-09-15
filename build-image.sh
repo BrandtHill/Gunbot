@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+docker run --rm -i -v "`pwd`/:/app" -w "/app" elixir:1.10-alpine sh -c "mix local.hex --force && mix local.rebar --force && mix deps.get && MIX_ENV=prod mix release --overwrite"
+
+docker build -t "brandt/gunbot:latest" .
