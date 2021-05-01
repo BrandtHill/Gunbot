@@ -14,5 +14,4 @@ defmodule Gunbot do
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Gunbot.Supervisor)
   end
-
 end

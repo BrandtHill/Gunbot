@@ -1,5 +1,4 @@
 defmodule Gunbot.GunbrokerApi do
-
   @category_id 851
 
   defp headers do
@@ -10,19 +9,36 @@ defmodule Gunbot.GunbrokerApi do
   end
 
   def get_items(keywords, max_price \\ nil) do
-    params = [{"Categories", @category_id}, {"Keywords", keywords}]
-    params = if max_price, do: params ++ [{"MaxPrice", max_price}]
+    params = [{"Categories", @category_id}, {"Keywords", keywords}, {"PageSize", "3"}]
+    params = if max_price, do: params ++ [{"MaxPrice", max_price}], else: []
     HTTPoison.get(Application.get_env(:gunbot, :api_url) <> "/Items", headers(), params: params)
   end
 
+  def get_ffls(zip) do
+    params = [{"PageSize", "3"}]
+    HTTPoison.get(Application.get_env(:gunbot, :api_url) <> "/FFLs/Zip/#{zip}", headers(), params: params)
+  end
+
+  def get_ffl(id) do
+    HTTPoison.get(Application.get_env(:gunbot, :api_url) <> "/FFLs/#{id}", headers())
+  end
+
   def get_access_token do
-    {:ok, credentials} = Jason.encode(%{
-      username: Application.get_env(:gunbot, :username),
-      password: Application.get_env(:gunbot, :password)})
-    %{status_code: 200, body: body} = HTTPoison.post!(Application.get_env(:gunbot, :api_url) <> "/Users/AccessToken",  credentials, headers())
-    token = body
+    {:ok, credentials} =
+      Jason.encode(%{
+        username: Application.get_env(:gunbot, :username),
+        password: Application.get_env(:gunbot, :password)
+      })
+
+    %{status_code: 200, body: body} =
+      HTTPoison.post!(
+        Application.get_env(:gunbot, :api_url) <> "/Users/AccessToken",
+        credentials,
+        headers()
+      )
+
+    body
     |> Jason.decode!()
     |> Map.get("accessToken")
-    Application.put_env(:gunbot, :token, token)
   end
 end

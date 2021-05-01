@@ -22,7 +22,7 @@ defmodule Gunbot.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:nostrum, "~> 0.4"},
+      {:nostrum, git: "https://github.com/Kraigie/nostrum.git"},
       {:httpoison, "~> 1.7"},
       {:jason, "~> 1.2"},
       {:ecto_sql, "~> 3.4"},

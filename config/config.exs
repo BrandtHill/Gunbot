@@ -15,5 +15,4 @@ config :gunbot,
   dev_key: System.get_env("GUNBROKER_API_KEY"),
   api_url: System.get_env("GUNBROKER_API_URL", "https://api.gunbroker.com/v1"),
   gui_url: System.get_env("GUNBROKER_GUI_URL", "https://www.gunbroker.com/"),
-  ecto_repos: [Gunbot.Repo],
-  default_channel_id: System.get_env("DISCORD_DEFAULT_CHANNEL_ID", "0") |> String.to_integer
+  ecto_repos: [Gunbot.Repo]
