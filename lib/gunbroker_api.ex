@@ -1,5 +1,13 @@
 defmodule Gunbot.GunbrokerApi do
-  @category_id 851
+
+  @categories %{
+    "Guns" => 851,
+    "Pistols" => 978,
+    "Rifles" => 979,
+    "Shotguns" => 980,
+    "Ammo" => 1012,
+    "Optics" => 1017
+  }
 
   defp headers do
     [
@@ -8,15 +16,18 @@ defmodule Gunbot.GunbrokerApi do
     ]
   end
 
-  def get_items(keywords, max_price \\ nil) do
-    params = [{"Categories", @category_id}, {"Keywords", keywords}, {"PageSize", "3"}]
+  def get_items(keywords, max_price \\ nil, category \\ "Guns") do
+    params = [{"Categories", @categories[category]}, {"Keywords", keywords}, {"PageSize", "3"}]
     params = if max_price, do: params ++ [{"MaxPrice", max_price}], else: []
     HTTPoison.get(Application.get_env(:gunbot, :api_url) <> "/Items", headers(), params: params)
   end
 
   def get_ffls(zip) do
     params = [{"PageSize", "3"}]
-    HTTPoison.get(Application.get_env(:gunbot, :api_url) <> "/FFLs/Zip/#{zip}", headers(), params: params)
+
+    HTTPoison.get(Application.get_env(:gunbot, :api_url) <> "/FFLs/Zip/#{zip}", headers(),
+      params: params
+    )
   end
 
   def get_ffl(id) do

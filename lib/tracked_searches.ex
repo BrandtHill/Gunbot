@@ -13,13 +13,14 @@ defmodule Gunbot.TrackedSearch do
   ]
 
   schema "tracked_searches" do
-    field(:user_id, :integer)
-    field(:guild_id, :integer)
-    field(:channel_id, :integer)
-    field(:user_nickname, :string)
-    field(:max_price, :integer)
-    field(:keywords, :string)
-    field(:last_checked, :utc_datetime)
+    field :user_id, :integer
+    field :guild_id, :integer
+    field :channel_id, :integer
+    field :user_nickname, :string
+    field :max_price, :integer
+    field :keywords, :string
+    field :category, :string, default: "Guns"
+    field :last_checked, :utc_datetime
   end
 
   def changeset(tracked_search, params \\ %{}) do

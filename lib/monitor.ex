@@ -4,7 +4,8 @@ defmodule Gunbot.Monitor do
 
   import Ecto.Query, only: [from: 2]
 
-  @loop_period 1000 * 60 * 5 # 5 minutes
+  # 5 minutes
+  @loop_period 1000 * 60 * 5
 
   @num_sec_day 60 * 60 * 24
 
@@ -28,13 +29,19 @@ defmodule Gunbot.Monitor do
   end
 
   def do_check() do
-    results = Repo.all(from t in TrackedSearch, where: t.last_checked < ^DateTime.add(DateTime.utc_now(), -@num_sec_day))
+    results =
+      Repo.all(
+        from(t in TrackedSearch,
+          where: t.last_checked < ^DateTime.add(DateTime.utc_now(), -@num_sec_day)
+        )
+      )
 
-    searches = Enum.reduce(results, %{}, fn ts, acc ->
-      list = acc |> Map.get(ts.channel_id, [])
-      list = list ++ [ts]
-      acc |> Map.put(ts.channel_id, list)
-    end)
+    searches =
+      Enum.reduce(results, %{}, fn ts, acc ->
+        list = acc |> Map.get(ts.channel_id, [])
+        list = list ++ [ts]
+        acc |> Map.put(ts.channel_id, list)
+      end)
 
     Enum.each(Map.keys(searches), fn ch -> send_channel_message(ch, searches[ch]) end)
   end
@@ -42,12 +49,15 @@ defmodule Gunbot.Monitor do
   def send_channel_message(channel_id, search_list) do
     content =
       Enum.reduce(search_list, "", fn ts, acc ->
-        TrackedSearch.changeset(ts, %{last_checked: DateTime.truncate(DateTime.utc_now, :second)}) |> Repo.update!
+        TrackedSearch.changeset(ts, %{
+          last_checked: DateTime.truncate(DateTime.utc_now(), :second)
+        })
+        |> Repo.update!()
+
         search_message = Commands.do_scheduled_search(ts)
         if search_message, do: acc <> "#{search_message}\n", else: acc
       end)
 
     unless content == "", do: Nostrum.Api.create_message(channel_id, content)
   end
-
 end
