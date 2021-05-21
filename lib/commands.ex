@@ -113,14 +113,13 @@ defmodule Gunbot.Commands do
 
   def show(_cmd, msg) do
     message =
-      case Repo.all(from(t in TrackedSearch, where: t.guild_id == ^msg.guild_id)) do
+      case Repo.all(from t in TrackedSearch, where: t.guild_id == ^msg.guild_id) do
         [] ->
           "No active recurring searches were found in this guild."
 
         all ->
           Enum.reduce(all, "", fn ts, acc ->
-            acc <>
-              "ID #{ts.id}: #{ts.user_nickname} is searching in #{ts.category} for #{ts.keywords} for $#{ts.max_price}\n"
+            "#{acc}ID #{ts.id}: #{ts.user_nickname} is searching in #{ts.category} for #{ts.keywords} for $#{ts.max_price}\n"
           end)
       end
 
@@ -159,10 +158,7 @@ defmodule Gunbot.Commands do
   end
 
   defp improperly_formatted(cmd),
-    do:
-      "Improperly formatted. Usage: #{@prefix}#{
-        @commands |> Map.get(String.downcase(cmd)) |> elem(2)
-      }"
+    do: "Improperly formatted. Usage: #{@prefix}#{@commands |> Map.get(String.downcase(cmd)) |> elem(2)}"
 
   defp mention(%TrackedSearch{} = tracked_search), do: mention(tracked_search.user_id)
 

@@ -25,9 +25,7 @@ defmodule Gunbot.GunbrokerApi do
   def get_ffls(zip) do
     params = [{"PageSize", "3"}]
 
-    HTTPoison.get(Application.get_env(:gunbot, :api_url) <> "/FFLs/Zip/#{zip}", headers(),
-      params: params
-    )
+    HTTPoison.get(Application.get_env(:gunbot, :api_url) <> "/FFLs/Zip/#{zip}", headers(), params: params)
   end
 
   def get_ffl(id) do
