@@ -1,6 +1,6 @@
 # Gunbot
 
-Gunbot is a Discord bot that use Gunbroker's REST API to allow users to search for items.
+Gunbot is a Discord bot that uses Gunbroker's REST API to allow users to search for items.
 
 Running the `!help` command displays the following:
 ```
