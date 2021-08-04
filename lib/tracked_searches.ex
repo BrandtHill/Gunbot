@@ -25,7 +25,7 @@ defmodule Gunbot.TrackedSearch do
 
   def changeset(tracked_search, params \\ %{}) do
     tracked_search
-    |> Ecto.Changeset.cast(params, @req_fields)
+    |> Ecto.Changeset.cast(params, all_fields())
     |> Ecto.Changeset.validate_required(@req_fields)
     |> Ecto.Changeset.validate_change(:user_id, fn :user_id, x ->
       if is_snowflake(x), do: [], else: [user_id: "must be a snowflake"]
@@ -36,5 +36,11 @@ defmodule Gunbot.TrackedSearch do
     |> Ecto.Changeset.validate_change(:channel_id, fn :channel_id, x ->
       if is_snowflake(x), do: [], else: [channel_id: "must be a snowflake"]
     end)
+  end
+
+  def all_fields do
+    %__MODULE__{}
+    |> Map.drop([:__meta__, :__struct__])
+    |> Map.keys()
   end
 end
