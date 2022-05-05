@@ -25,7 +25,7 @@ defmodule Gunbot.Commands do
   ]
 
   @ffl_opts [
-    opt.(4, "zip", "ZIP code to search in", required: true, min_value: 0, max_value: 99999)
+    opt.(3, "zip", "ZIP code to search in", required: true)
   ]
 
   @remove_opts [
