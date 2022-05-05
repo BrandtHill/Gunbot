@@ -8,8 +8,7 @@ config :gunbot, Gunbot.Repo,
   ssl: System.get_env("DATABASE_SSL", "true") == "true"
 
 config :nostrum,
-  token: System.get_env("DISCORD_API_KEY"),
-  num_shards: 1
+  token: System.get_env("DISCORD_API_KEY")
 
 config :gunbot,
   dev_key: System.get_env("GUNBROKER_API_KEY"),
