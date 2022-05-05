@@ -1,171 +1,127 @@
 defmodule Gunbot.Commands do
-  alias Nostrum.Api
   alias Gunbot.{GunbrokerApi, Repo, TrackedSearch}
 
   import Ecto.Query, only: [from: 2]
+  alias Ecto.Changeset
 
-  @prefix "!"
+  opt = fn type, name, desc, opts ->
+    %{type: type, name: name, description: desc}
+    |> Map.merge(Enum.into(opts, %{}))
+  end
+
+  @categories ["Guns", "Pistols", "Rifles", "Shotguns", "Ammo", "Optics"]
+
+  @search_category_choices Enum.map(@categories, &%{name: &1, value: &1})
+
+  @search_opts_opts [
+    opt.(3, "category", "Search category", required: true, choices: @search_category_choices),
+    opt.(3, "keywords", "Search keywords", required: true),
+    opt.(4, "price", "Maximum price to search for", required: true)
+  ]
+
+  @search_opts [
+    opt.(1, "once", "Do a one-time search", options: @search_opts_opts),
+    opt.(1, "daily", "Create a daily recurring search", options: @search_opts_opts)
+  ]
+
+  @ffl_opts [
+    opt.(4, "zip", "ZIP code to search in", required: true, min_value: 0, max_value: 99999)
+  ]
+
+  @remove_opts [
+    opt.(4, "id", "ID to remove", required: true)
+  ]
 
   @commands %{
-    "help"    =>  {&__MODULE__.help/2,    "Show all commands", "help"},
-    "search"  =>  {&__MODULE__.search/2,  "Do a one-time search", "search [{CATEGORY}] {PRICE} {KEYWORDS}"},
-    "daily"   =>  {&__MODULE__.search/2,  "Create a daily recurring search", "daily [{CATEGORY}] {PRICE} {KEYWORDS}"},
-    "ffl"     =>  {&__MODULE__.ffl/2,     "Search for nearby FFLs", "ffl {ZIP_CODE}"},
-    "show"    =>  {&__MODULE__.show/2,    "Show all recurring searches", "show"},
-    "remove"  =>  {&__MODULE__.remove/2,  "Remove a recurring search", "remove {DAILY_SEARCH_ID}"}
+    "help" => {:help, "Show all commands", []},
+    "search" => {:search, "Do a search", @search_opts},
+    "ffl" => {:ffl, "Search for nearby FFLs", @ffl_opts},
+    "show" => {:show, "Show all recurring searches", []},
+    "remove" => {:remove, "Remove a recurring search", @remove_opts}
   }
 
-  def command_prefix, do: @prefix
+  def commands, do: @commands
 
-  def dispatch(cmd, msg) do
-    {function, _, _} =
-      @commands
-      |> Map.get(cmd)
-
-    function.(cmd, msg)
+  def dispatch(%{data: %{name: cmd}} = interaction) do
+    case Map.get(@commands, cmd) do
+      {function, _, _} -> :erlang.apply(__MODULE__, function, [interaction])
+      nil -> nil
+    end
   end
 
-  def help(_cmd, msg) do
-    content =
-      @commands
-      |> Enum.reduce("", fn {cmd, {_, desc, usage}}, acc ->
-        acc <> "`#{@prefix}#{cmd}` - #{desc} - `#{@prefix}#{usage}`\n"
-      end)
-
-    content = content <> """
-
-      The `search` and `daily` commands accept an optional category flag
-        `-g`    Guns & Firearms (default)
-            `-p`    Pistols
-            `-r`    Rifles
-            `-s`    Shotguns
-        `-a`    Ammo
-        `-o`    Optics
-
-      Examples
-        `#{@prefix}daily 350 mosin nagant`
-        `#{@prefix}search -p 625 glizzy 19`
-    """
-
-    Api.create_message(msg.channel_id, content)
+  def help(_interaction) do
+    Enum.map_join(@commands, "\n", fn {cmd, {_, desc, _}} -> "/#{cmd} - #{desc}" end)
   end
 
-  def search(cmd, msg) do
-    matches =
-      Regex.named_captures(
-        ~r/^#{@prefix}\s*(?<command>\w+)\s*(?<category>-\w+)?\s+(?<price>\d+)\s+(?<keywords>.+$)/i,
-        msg.content
-      )
+  def search(%{guild_id: g_id, channel_id: c_id, member: member, data: %{options: options}}) do
+    [%{name: name, options: [%{value: category}, %{value: keywords}, %{value: price}]}] = options
 
-    message =
-      if !matches do
-        improperly_formatted(cmd)
-      else
-        {empty_msg, error_msg} =
-          if cmd == "daily" do
-            {:ok, _tracked_search} =
-              TrackedSearch.changeset(%TrackedSearch{}, %{
-                max_price: matches["price"],
-                keywords: matches["keywords"],
-                category: get_category(matches["category"]),
-                user_id: msg.author.id,
-                guild_id: msg.guild_id,
-                channel_id: msg.channel_id,
-                user_nickname: msg.member.nick || msg.author.username,
-                last_checked: DateTime.utc_now() |> DateTime.truncate(:second)
-              })
-              |> Repo.insert()
+    changeset =
+      TrackedSearch.build(%{
+        max_price: price,
+        keywords: keywords,
+        category: category,
+        user_id: member.user.id,
+        guild_id: g_id,
+        channel_id: c_id,
+        user_nickname: member.nick || member.user.username,
+        last_checked: DateTime.utc_now() |> DateTime.truncate(:second)
+      })
 
-            {"You will be notified when something is found.",
-             "Your daily search will still occur."}
-          else
-            {"Consider creating a daily search to be notified if something is found.",
-             "Try re-running this command."}
-          end
+    if changeset.valid? do
+      ts =
+        if(name == "daily",
+          do: Repo.insert!(changeset),
+          else: Changeset.apply_changes(changeset)
+        )
 
-        case do_search(matches["keywords"], matches["price"], get_category(matches["category"])) do
-          {:ok, m} -> m
-          {:empty, m} -> "#{m} #{empty_msg}"
-          {:error, m} -> "#{m} #{error_msg}"
+      do_search(ts) |> elem(1)
+    else
+      "Invalid parameters given"
+    end
+  end
+
+  def ffl(%{data: %{options: [%{value: zip}]}} = _interaction) do
+    case do_ffl_by_zip(zip) do
+      {:ok, msg} -> msg
+      {:empty, msg} -> "#{msg} Try another zip code."
+      {:error, msg} -> "#{msg} Try re-running this command."
+    end
+  end
+
+  def show(%{guild_id: guild_id} = _interaction) do
+    case Repo.all(from(t in TrackedSearch, where: t.guild_id == ^guild_id)) do
+      [] ->
+        "No active recurring searches were found in this guild."
+
+      all ->
+        Enum.map_join(all, "\n", fn %TrackedSearch{} = t ->
+          "#{t.id}: #{t.user_nickname} searching for #{t.category}, #{t.keywords}, $#{t.max_price}"
+        end)
+    end
+  end
+
+  def remove(%{user: %{id: user_id}, data: %{options: [%{value: id}]}} = _interaction) do
+    case Repo.get(TrackedSearch, id) do
+      nil ->
+        "Unable to find a tracked search with id #{id}. Use `show` command to view searches."
+
+      %TrackedSearch{user_id: t_uid} = ts when t_uid == user_id ->
+        case Repo.delete(ts) do
+          {:ok, _} -> "Search with id #{id} successfully removed."
+          {:error, _} -> "An error occurred whilst trying to remove search with id #{id}."
         end
-      end
 
-    Api.create_message(msg.channel_id, message)
+      %TrackedSearch{} = ts ->
+        "Unable to remove #{ts.user_nickname}'s search. You may only remove your own."
+    end
   end
 
-  def ffl(cmd, msg) do
-    matches =
-      Regex.named_captures(~r/^#{@prefix}\s*(?<command>\w+)\s+(?<zip>\d+)\s*$/i, msg.content)
-
-    message =
-      if !matches do
-        improperly_formatted(cmd)
-      else
-        case do_ffl_by_zip(matches["zip"]) do
-          {:ok, m} -> m
-          {:empty, m} -> "#{m} Try another zip code."
-          {:error, m} -> "#{m} Try re-running this command."
-        end
-      end
-
-    Api.create_message(msg.channel_id, message)
-  end
-
-  def show(_cmd, msg) do
-    message =
-      case Repo.all(from t in TrackedSearch, where: t.guild_id == ^msg.guild_id) do
-        [] ->
-          "No active recurring searches were found in this guild."
-
-        all ->
-          Enum.reduce(all, "", fn ts, acc ->
-            "#{acc}ID #{ts.id}: #{ts.user_nickname} is searching in #{ts.category} for #{ts.keywords} for $#{ts.max_price}\n"
-          end)
-      end
-
-    Api.create_message(msg.channel_id, message)
-  end
-
-  def remove(cmd, msg) do
-    matches =
-      Regex.named_captures(~r/^#{@prefix}\s*(?<command>\w+)\s+(?<id>\d+)\s*$/i, msg.content)
-
-    message =
-      if !matches do
-        improperly_formatted(cmd)
-      else
-        case Integer.parse(matches["id"]) do
-          :error ->
-            improperly_formatted(cmd)
-
-          {id, ""} ->
-            if search = Repo.get(TrackedSearch, id) do
-              if msg.author.id == search.user_id do
-                case Repo.delete(search) do
-                  {:ok, _} -> "Search with id #{id} successfully removed."
-                  {:error, _} -> "An error occurred whilst trying to remove search with id #{id}."
-                end
-              else
-                "Unable to remove #{search.user_nickname}'s search. You may only remove your own."
-              end
-            else
-              "Unable to find a tracked search with id #{id}. Use `show` command to view searches."
-            end
-        end
-      end
-
-    Api.create_message(msg.channel_id, message)
-  end
-
-  defp improperly_formatted(cmd),
-    do: "Improperly formatted. Usage: #{@prefix}#{@commands |> Map.get(String.downcase(cmd)) |> elem(2)}"
-
-  defp mention(%TrackedSearch{} = tracked_search), do: mention(tracked_search.user_id)
-
+  defp mention(%TrackedSearch{user_id: user_id}), do: mention(user_id)
   defp mention(user_id), do: "<@!#{user_id}> "
 
-  def do_search(%TrackedSearch{} = tracked_search),
-    do: do_search(tracked_search.keywords, tracked_search.max_price, tracked_search.category)
+  def do_search(%TrackedSearch{keywords: kw, max_price: price, category: cat}),
+    do: do_search(kw, price, cat)
 
   def do_search(keywords, price, category) do
     case GunbrokerApi.get_items(keywords, price, category) do
@@ -176,13 +132,14 @@ defmodule Gunbot.Commands do
           {:empty, "No items found."}
         else
           msg =
-            Enum.take(json["results"], 3)
-            |> Enum.reduce("", fn data, acc ->
+            json["results"]
+            |> Enum.take(3)
+            |> Enum.map_join("\n", fn data ->
               price = data["price"] |> :erlang.float_to_binary(decimals: 2)
               bid_price = data["bidPrice"] |> :erlang.float_to_binary(decimals: 2)
               item_id = data["itemID"] |> Integer.to_string()
               gui_url = Application.get_env(:gunbot, :gui_url) <> "item/#{item_id}"
-              acc <> "I found *this* for $#{price} (current bid $#{bid_price}): #{gui_url}\n"
+              "I found *this* for $#{price} (current bid $#{bid_price}): #{gui_url}"
             end)
 
           {:ok, msg}
@@ -249,12 +206,4 @@ defmodule Gunbot.Commands do
         nil
     end
   end
-
-  def get_category("-g"), do: "Guns"
-  def get_category("-p"), do: "Pistols"
-  def get_category("-r"), do: "Rifles"
-  def get_category("-s"), do: "Shotguns"
-  def get_category("-a"), do: "Ammo"
-  def get_category("-o"), do: "Optics"
-  def get_category(_option), do: "Guns"
 end

@@ -2,6 +2,8 @@ defmodule Gunbot.TrackedSearch do
   use Ecto.Schema
   import Nostrum.Snowflake, only: [is_snowflake: 1]
 
+  import Ecto.Changeset
+
   @req_fields [
     :user_id,
     :guild_id,
@@ -12,35 +14,32 @@ defmodule Gunbot.TrackedSearch do
     :last_checked
   ]
 
+  @allowed_fields [:category] ++ @req_fields
+
   schema "tracked_searches" do
-    field :user_id, :integer
-    field :guild_id, :integer
-    field :channel_id, :integer
-    field :user_nickname, :string
-    field :max_price, :integer
-    field :keywords, :string
-    field :category, :string, default: "Guns"
-    field :last_checked, :utc_datetime
+    field(:user_id, :integer)
+    field(:guild_id, :integer)
+    field(:channel_id, :integer)
+    field(:user_nickname, :string)
+    field(:max_price, :integer)
+    field(:keywords, :string)
+    field(:category, :string, default: "Guns")
+    field(:last_checked, :utc_datetime)
   end
 
   def changeset(tracked_search, params \\ %{}) do
     tracked_search
-    |> Ecto.Changeset.cast(params, all_fields())
-    |> Ecto.Changeset.validate_required(@req_fields)
-    |> Ecto.Changeset.validate_change(:user_id, fn :user_id, x ->
-      if is_snowflake(x), do: [], else: [user_id: "must be a snowflake"]
-    end)
-    |> Ecto.Changeset.validate_change(:guild_id, fn :guild_id, x ->
-      if is_snowflake(x), do: [], else: [guild_id: "must be a snowflake"]
-    end)
-    |> Ecto.Changeset.validate_change(:channel_id, fn :channel_id, x ->
-      if is_snowflake(x), do: [], else: [channel_id: "must be a snowflake"]
-    end)
+    |> cast(params, @allowed_fields)
+    |> validate_required(@req_fields)
+    |> validate_change(:user_id, &validate_snowflake/2)
+    |> validate_change(:guild_id, &validate_snowflake/2)
+    |> validate_change(:channel_id, &validate_snowflake/2)
   end
 
-  def all_fields do
-    %__MODULE__{}
-    |> Map.drop([:__meta__, :__struct__])
-    |> Map.keys()
+  def build(params) do
+    changeset(%__MODULE__{}, params)
   end
+
+  defp validate_snowflake(atom, value),
+    do: (is_snowflake(value) && []) || [{atom, "must be a snowflake"}]
 end
